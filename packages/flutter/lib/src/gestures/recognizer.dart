@@ -26,21 +26,12 @@ export 'pointer_router.dart' show PointerRouter;
 /// anonymous functions that return objects of particular types.
 typedef RecognizerCallback<T> = T Function();
 
-/// Configuration of offset passed to [DragStartDetails].
-///
-/// The settings determines when a drag formally starts when the user
-/// initiates a drag.
-///
-/// See also:
-///
-///  * [DragGestureRecognizer.dragStartBehavior], which gives an example for the different behaviors.
+/// 偏移的配置传递给[DragStartDetails]。
 enum DragStartBehavior {
-  /// Set the initial offset, at the position where the first down event was
-  /// detected.
+  /// 在检测到第一个下降事件的位置设置初始偏移量。
   down,
 
-  /// Set the initial position at the position where the drag start event was
-  /// detected.
+  /// 将初始位置设置在检测到拖动开始事件的位置。
   start,
 }
 
