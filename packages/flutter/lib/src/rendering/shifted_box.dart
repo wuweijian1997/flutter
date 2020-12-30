@@ -104,9 +104,7 @@ class RenderPadding extends RenderShiftedBox {
     required EdgeInsetsGeometry padding,
     TextDirection? textDirection,
     RenderBox? child,
-  }) : assert(padding != null),
-       assert(padding.isNonNegative),
-       _textDirection = textDirection,
+  }) : _textDirection = textDirection,
        _padding = padding,
        super(child);
 

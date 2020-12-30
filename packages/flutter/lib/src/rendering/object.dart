@@ -1214,17 +1214,6 @@ abstract class RenderObject extends AbstractNode with DiagnosticableTreeMixin im
   /// dirty for layout, paint, etc, so that the effects of a hot reload can be
   /// seen, or so that the effect of changing a global debug flag (such as
   /// [debugPaintSizeEnabled]) can be applied.
-  ///
-  /// This is called by the [RendererBinding] in response to the
-  /// `ext.flutter.reassemble` hook, which is used by development tools when the
-  /// application code has changed, to cause the widget tree to pick up any
-  /// changed implementations.
-  ///
-  /// This is expensive and should not be called except during development.
-  ///
-  /// See also:
-  ///
-  ///  * [BindingBase.reassembleApplication]
   void reassemble() {
     markNeedsLayout();
     markNeedsCompositingBitsUpdate();
@@ -1235,23 +1224,7 @@ abstract class RenderObject extends AbstractNode with DiagnosticableTreeMixin im
     });
   }
 
-  // LAYOUT
-
   /// Data for use by the parent render object.
-  ///
-  /// The parent data is used by the render object that lays out this object
-  /// (typically this object's parent in the render tree) to store information
-  /// relevant to itself and to any other nodes who happen to know exactly what
-  /// the data means. The parent data is opaque to the child.
-  ///
-  ///  * The parent data field must not be directly set, except by calling
-  ///    [setupParentData] on the parent node.
-  ///  * The parent data can be set before the child is added to the parent, by
-  ///    calling [setupParentData] on the future parent node.
-  ///  * The conventions for using the parent data depend on the layout protocol
-  ///    used between the parent and child. For example, in box layout, the
-  ///    parent data is completely opaque but in sector layout the child is
-  ///    permitted to read some fields of the parent data.
   ParentData? parentData;
 
   /// Override to setup parent data correctly for your children.
@@ -1364,29 +1337,6 @@ abstract class RenderObject extends AbstractNode with DiagnosticableTreeMixin im
   /// null.
   bool get _debugCanPerformMutations {
     late bool result;
-    assert(() {
-      RenderObject node = this;
-      while (true) {
-        if (node._doingThisLayoutWithCallback) {
-          result = true;
-          break;
-        }
-        if (owner != null && owner!._debugAllowMutationsToDirtySubtrees && node._needsLayout) {
-          result = true;
-          break;
-        }
-        if (node._debugMutationsLocked) {
-          result = false;
-          break;
-        }
-        if (node.parent is! RenderObject) {
-          result = true;
-          break;
-        }
-        node = node.parent! as RenderObject;
-      }
-      return true;
-    }());
     return result;
   }
 
@@ -1423,13 +1373,6 @@ abstract class RenderObject extends AbstractNode with DiagnosticableTreeMixin im
   }
 
   /// Whether this render object's layout information is dirty.
-  ///
-  /// This is only set in debug mode. In general, render objects should not need
-  /// to condition their runtime behavior on whether they are dirty or not,
-  /// since they should only be marked dirty immediately prior to being laid
-  /// out and painted. In release builds, this throws.
-  ///
-  /// It is intended to be used by tests and asserts.
   bool get debugNeedsLayout {
     late bool result;
     assert(() {
@@ -1527,22 +1470,15 @@ abstract class RenderObject extends AbstractNode with DiagnosticableTreeMixin im
   /// If [sizedByParent] has changed, calls
   /// [markNeedsLayoutForSizedByParentChange] instead of [markNeedsLayout].
   void markNeedsLayout() {
-    assert(_debugCanPerformMutations);
     if (_needsLayout) {
       assert(_debugSubtreeRelayoutRootAlreadyMarkedNeedsLayout());
       return;
     }
-    assert(_relayoutBoundary != null);
     if (_relayoutBoundary != this) {
       markParentNeedsLayout();
     } else {
       _needsLayout = true;
       if (owner != null) {
-        assert(() {
-          if (debugPrintMarkNeedsLayoutStacks)
-            debugPrintStack(label: 'markNeedsLayout() called for $this');
-          return true;
-        }());
         owner!._nodesNeedingLayout.add(this);
         owner!.requestVisualUpdate();
       }
@@ -1561,14 +1497,11 @@ abstract class RenderObject extends AbstractNode with DiagnosticableTreeMixin im
   @protected
   void markParentNeedsLayout() {
     _needsLayout = true;
-    assert(this.parent != null);
     final RenderObject parent = this.parent! as RenderObject;
     if (!_doingThisLayoutWithCallback) {
       parent.markNeedsLayout();
     } else {
-      assert(parent._debugDoingThisLayout);
     }
-    assert(parent == this.parent);
   }
 
   /// Mark this render object's layout information as dirty (like
@@ -1603,130 +1536,34 @@ abstract class RenderObject extends AbstractNode with DiagnosticableTreeMixin im
   ///
   /// See [RenderView] for an example of how this function is used.
   void scheduleInitialLayout() {
-    assert(attached);
-    assert(parent is! RenderObject);
-    assert(!owner!._debugDoingLayout);
-    assert(_relayoutBoundary == null);
     _relayoutBoundary = this;
-    assert(() {
-      _debugCanParentUseSize = false;
-      return true;
-    }());
     owner!._nodesNeedingLayout.add(this);
   }
 
   void _layoutWithoutResize() {
-    assert(_relayoutBoundary == this);
     RenderObject? debugPreviousActiveLayout;
-    assert(!_debugMutationsLocked);
-    assert(!_doingThisLayoutWithCallback);
-    assert(_debugCanParentUseSize != null);
-    assert(() {
-      _debugMutationsLocked = true;
-      _debugDoingThisLayout = true;
-      debugPreviousActiveLayout = _debugActiveLayout;
-      _debugActiveLayout = this;
-      if (debugPrintLayouts)
-        debugPrint('Laying out (without resize) $this');
-      return true;
-    }());
     try {
       performLayout();
       markNeedsSemanticsUpdate();
     } catch (e, stack) {
       _debugReportException('performLayout', e, stack);
     }
-    assert(() {
-      _debugActiveLayout = debugPreviousActiveLayout;
-      _debugDoingThisLayout = false;
-      _debugMutationsLocked = false;
-      return true;
-    }());
     _needsLayout = false;
     markNeedsPaint();
   }
 
   /// Compute the layout for this render object.
-  ///
-  /// This method is the main entry point for parents to ask their children to
-  /// update their layout information. The parent passes a constraints object,
-  /// which informs the child as to which layouts are permissible. The child is
-  /// required to obey the given constraints.
-  ///
-  /// If the parent reads information computed during the child's layout, the
-  /// parent must pass true for `parentUsesSize`. In that case, the parent will
-  /// be marked as needing layout whenever the child is marked as needing layout
-  /// because the parent's layout information depends on the child's layout
-  /// information. If the parent uses the default value (false) for
-  /// `parentUsesSize`, the child can change its layout information (subject to
-  /// the given constraints) without informing the parent.
-  ///
-  /// Subclasses should not override [layout] directly. Instead, they should
-  /// override [performResize] and/or [performLayout]. The [layout] method
-  /// delegates the actual work to [performResize] and [performLayout].
-  ///
-  /// The parent's [performLayout] method should call the [layout] of all its
-  /// children unconditionally. It is the [layout] method's responsibility (as
-  /// implemented here) to return early if the child does not need to do any
-  /// work to update its layout information.
   void layout(Constraints constraints, { bool parentUsesSize = false }) {
     if (!kReleaseMode && debugProfileLayoutsEnabled)
       Timeline.startSync('$runtimeType',  arguments: timelineArgumentsIndicatingLandmarkEvent);
 
-    assert(constraints != null);
-    assert(constraints.debugAssertIsValid(
-      isAppliedConstraint: true,
-      informationCollector: () sync* {
-        final List<String> stack = StackTrace.current.toString().split('\n');
-        int? targetFrame;
-        final Pattern layoutFramePattern = RegExp(r'^#[0-9]+ +RenderObject.layout \(');
-        for (int i = 0; i < stack.length; i += 1) {
-          if (layoutFramePattern.matchAsPrefix(stack[i]) != null) {
-            targetFrame = i + 1;
-            break;
-          }
-        }
-        if (targetFrame != null && targetFrame < stack.length) {
-          final Pattern targetFramePattern = RegExp(r'^#[0-9]+ +(.+)$');
-          final Match? targetFrameMatch = targetFramePattern.matchAsPrefix(stack[targetFrame]);
-          final String? problemFunction = (targetFrameMatch != null && targetFrameMatch.groupCount > 0) ? targetFrameMatch.group(1) : stack[targetFrame].trim();
-          // TODO(jacobr): this case is similar to displaying a single stack frame.
-          yield ErrorDescription(
-            "These invalid constraints were provided to $runtimeType's layout() "
-            'function by the following function, which probably computed the '
-            'invalid constraints in question:\n'
-            '  $problemFunction'
-          );
-        }
-      },
-    ));
-    assert(!_debugDoingThisResize);
-    assert(!_debugDoingThisLayout);
     RenderObject? relayoutBoundary;
     if (!parentUsesSize || sizedByParent || constraints.isTight || parent is! RenderObject) {
       relayoutBoundary = this;
     } else {
       relayoutBoundary = (parent! as RenderObject)._relayoutBoundary;
     }
-    assert(() {
-      _debugCanParentUseSize = parentUsesSize;
-      return true;
-    }());
     if (!_needsLayout && constraints == _constraints && relayoutBoundary == _relayoutBoundary) {
-      assert(() {
-        // in case parentUsesSize changed since the last invocation, set size
-        // to itself, so it has the right internal debug values.
-        _debugDoingThisResize = sizedByParent;
-        _debugDoingThisLayout = !sizedByParent;
-        final RenderObject? debugPreviousActiveLayout = _debugActiveLayout;
-        _debugActiveLayout = this;
-        debugResetSize();
-        _debugActiveLayout = debugPreviousActiveLayout;
-        _debugDoingThisLayout = false;
-        _debugDoingThisResize = false;
-        return true;
-      }());
-
       if (!kReleaseMode && debugProfileLayoutsEnabled)
         Timeline.finishSync();
       return;
@@ -1739,56 +1576,20 @@ abstract class RenderObject extends AbstractNode with DiagnosticableTreeMixin im
       visitChildren(_cleanChildRelayoutBoundary);
     }
     _relayoutBoundary = relayoutBoundary;
-    assert(!_debugMutationsLocked);
-    assert(!_doingThisLayoutWithCallback);
-    assert(() {
-      _debugMutationsLocked = true;
-      if (debugPrintLayouts)
-        debugPrint('Laying out (${sizedByParent ? "with separate resize" : "with resize allowed"}) $this');
-      return true;
-    }());
     if (sizedByParent) {
-      assert(() {
-        _debugDoingThisResize = true;
-        return true;
-      }());
       try {
         performResize();
-        assert(() {
-          debugAssertDoesMeetConstraints();
-          return true;
-        }());
       } catch (e, stack) {
         _debugReportException('performResize', e, stack);
       }
-      assert(() {
-        _debugDoingThisResize = false;
-        return true;
-      }());
     }
     RenderObject? debugPreviousActiveLayout;
-    assert(() {
-      _debugDoingThisLayout = true;
-      debugPreviousActiveLayout = _debugActiveLayout;
-      _debugActiveLayout = this;
-      return true;
-    }());
     try {
       performLayout();
       markNeedsSemanticsUpdate();
-      assert(() {
-        debugAssertDoesMeetConstraints();
-        return true;
-      }());
     } catch (e, stack) {
       _debugReportException('performLayout', e, stack);
     }
-    assert(() {
-      _debugActiveLayout = debugPreviousActiveLayout;
-      _debugDoingThisLayout = false;
-      _debugMutationsLocked = false;
-      return true;
-    }());
     _needsLayout = false;
     markNeedsPaint();
 
@@ -1807,58 +1608,15 @@ abstract class RenderObject extends AbstractNode with DiagnosticableTreeMixin im
 
   /// Whether the constraints are the only input to the sizing algorithm (in
   /// particular, child nodes have no impact).
-  ///
-  /// Returning false is always correct, but returning true can be more
-  /// efficient when computing the size of this render object because we don't
-  /// need to recompute the size if the constraints don't change.
-  ///
-  /// Typically, subclasses will always return the same value. If the value can
-  /// change, then, when it does change, the subclass should make sure to call
-  /// [markNeedsLayoutForSizedByParentChange].
-  ///
-  /// Subclasses that return true must not change the dimensions of this render
-  /// object in [performLayout]. Instead, that work should be done by
-  /// [performResize] or - for subclasses of [RenderBox] - in
-  /// [RenderBox.computeDryLayout].
   @protected
   bool get sizedByParent => false;
 
   /// {@template flutter.rendering.RenderObject.performResize}
   /// Updates the render objects size using only the constraints.
-  ///
-  /// Do not call this function directly: call [layout] instead. This function
-  /// is called by [layout] when there is actually work to be done by this
-  /// render object during layout. The layout constraints provided by your
-  /// parent are available via the [constraints] getter.
-  ///
-  /// This function is called only if [sizedByParent] is true.
-  /// {@endtemplate}
-  ///
-  /// Subclasses that set [sizedByParent] to true should override this method to
-  /// compute their size. Subclasses of [RenderBox] should consider overriding
-  /// [RenderBox.computeDryLayout] instead.
   @protected
   void performResize();
 
   /// Do the work of computing the layout for this render object.
-  ///
-  /// Do not call this function directly: call [layout] instead. This function
-  /// is called by [layout] when there is actually work to be done by this
-  /// render object during layout. The layout constraints provided by your
-  /// parent are available via the [constraints] getter.
-  ///
-  /// If [sizedByParent] is true, then this function should not actually change
-  /// the dimensions of this render object. Instead, that work should be done by
-  /// [performResize]. If [sizedByParent] is false, then this function should
-  /// both change the dimensions of this render object and instruct its children
-  /// to layout.
-  ///
-  /// In implementing this function, you must call [layout] on each of your
-  /// children, passing true for parentUsesSize if your layout information is
-  /// dependent on your child's layout information. Passing true for
-  /// parentUsesSize ensures that this render object will undergo layout if the
-  /// child undergoes layout. Otherwise, the child can change its layout
-  /// information without informing this render object.
   @protected
   void performLayout();
 

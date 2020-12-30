@@ -120,30 +120,6 @@ class DoubleTapGestureRecognizer extends GestureRecognizer {
     PointerDeviceKind? kind,
   }) : super(debugOwner: debugOwner, kind: kind);
 
-  // Implementation notes:
-  //
-  // The double tap recognizer can be in one of four states. There's no
-  // explicit enum for the states, because they are already captured by
-  // the state of existing fields. Specifically:
-  //
-  // 1. Waiting on first tap: In this state, the _trackers list is empty, and
-  //    _firstTap is null.
-  // 2. First tap in progress: In this state, the _trackers list contains all
-  //    the states for taps that have begun but not completed. This list can
-  //    have more than one entry if two pointers begin to tap.
-  // 3. Waiting on second tap: In this state, one of the in-progress taps has
-  //    completed successfully. The _trackers list is again empty, and
-  //    _firstTap records the successful tap.
-  // 4. Second tap in progress: Much like the "first tap in progress" state, but
-  //    _firstTap is non-null. If a tap completes successfully while in this
-  //    state, the callback is called and the state is reset.
-  //
-  // There are various other scenarios that cause the state to reset:
-  //
-  // - All in-progress taps are rejected (by time, distance, pointercancel, etc)
-  // - The long timer between taps expires
-  // - The gesture arena decides we have been rejected wholesale
-
   /// A pointer has contacted the screen with a primary button at the same
   /// location twice in quick succession, which might be the start of a double
   /// tap.
@@ -262,12 +238,10 @@ class DoubleTapGestureRecognizer extends GestureRecognizer {
   @override
   void rejectGesture(int pointer) {
     _TapTracker? tracker = _trackers[pointer];
-    // If tracker isn't in the list, check if this is the first tap tracker
     if (tracker == null &&
         _firstTap != null &&
         _firstTap!.pointer == pointer)
       tracker = _firstTap;
-    // If tracker is still null, we rejected ourselves already
     if (tracker != null)
       _reject(tracker);
   }
@@ -298,8 +272,6 @@ class DoubleTapGestureRecognizer extends GestureRecognizer {
     if (_firstTap != null) {
       if (_trackers.isNotEmpty)
         _checkCancel();
-      // Note, order is important below in order for the resolve -> reject logic
-      // to work properly.
       final _TapTracker tracker = _firstTap!;
       _firstTap = null;
       _reject(tracker);
@@ -311,8 +283,6 @@ class DoubleTapGestureRecognizer extends GestureRecognizer {
   void _registerFirstTap(_TapTracker tracker) {
     _startDoubleTapTimer();
     GestureBinding.instance!.gestureArena.hold(tracker.pointer);
-    // Note, order is important below in order for the clear -> reject logic to
-    // work properly.
     _freezeTracker(tracker);
     _trackers.remove(tracker.pointer);
     _clearTrackers();
@@ -330,7 +300,6 @@ class DoubleTapGestureRecognizer extends GestureRecognizer {
 
   void _clearTrackers() {
     _trackers.values.toList().forEach(_reject);
-    assert(_trackers.isEmpty);
   }
 
   void _freezeTracker(_TapTracker tracker) {

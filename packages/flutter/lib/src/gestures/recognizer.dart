@@ -35,28 +35,9 @@ enum DragStartBehavior {
   start,
 }
 
-/// The base class that all gesture recognizers inherit from.
-///
-/// Provides a basic API that can be used by classes that work with
-/// gesture recognizers but don't care about the specific details of
-/// the gestures recognizers themselves.
-///
-/// See also:
-///
-///  * [GestureDetector], the widget that is used to detect gestures.
-///  * [debugPrintRecognizerCallbacksTrace], a flag that can be set to help
-///    debug issues with gesture recognizers.
+/// 所有手势识别器都继承的基类。提供基本的API，供与手势识别器一起使用的类使用，但不关心手势识别器本身的具体细节。
 abstract class GestureRecognizer extends GestureArenaMember with DiagnosticableTreeMixin {
-  /// Initializes the gesture recognizer.
-  ///
-  /// The argument is optional and is only used for debug purposes (e.g. in the
-  /// [toString] serialization).
-  ///
-  /// {@template flutter.gestures.GestureRecognizer.kind}
-  /// It's possible to limit this recognizer to a specific [PointerDeviceKind]
-  /// by providing the optional [kind] argument. If [kind] is null,
-  /// the recognizer will accept pointer events from all device kinds.
-  /// {@endtemplate}
+  /// 初始化手势识别器。
   GestureRecognizer({ this.debugOwner, PointerDeviceKind? kind }) : _kindFilter = kind;
 
   /// The recognizer's owner.
@@ -65,29 +46,15 @@ abstract class GestureRecognizer extends GestureArenaMember with DiagnosticableT
   /// this gesture recognizer was created, to aid in debugging.
   final Object? debugOwner;
 
-  /// The kind of device that's allowed to be recognized. If null, events from
-  /// all device kinds will be tracked and recognized.
+  /// 允许识别的设备类型。如果为null，则将跟踪和识别所有设备类型的事件。
   final PointerDeviceKind? _kindFilter;
 
-  /// Holds a mapping between pointer IDs and the kind of devices they are
-  /// coming from.
+  /// 保持指针ID与它们来自的设备类型之间的映射。
   final Map<int, PointerDeviceKind> _pointerToKind = <int, PointerDeviceKind>{};
 
-  /// Registers a new pointer that might be relevant to this gesture
-  /// detector.
+  /// 注册可能与此手势检测器有关的新指针。
   ///
-  /// The owner of this gesture recognizer calls addPointer() with the
-  /// PointerDownEvent of each pointer that should be considered for
-  /// this gesture.
-  ///
-  /// It's the GestureRecognizer's responsibility to then add itself
-  /// to the global pointer router (see [PointerRouter]) to receive
-  /// subsequent events for this pointer, and to add the pointer to
-  /// the global gesture arena manager (see [GestureArenaManager]) to track
-  /// that pointer.
-  ///
-  /// This method is called for each and all pointers being added. In
-  /// most cases, you want to override [addAllowedPointer] instead.
+  /// 此手势识别器的所有者使用该手势应考虑的每个指针的PointerDownEvent调用addPointer（）。
   void addPointer(PointerDownEvent event) {
     _pointerToKind[event.pointer] = event.kind;
     if (isPointerAllowed(event)) {
@@ -97,49 +64,27 @@ abstract class GestureRecognizer extends GestureArenaMember with DiagnosticableT
     }
   }
 
-  /// Registers a new pointer that's been checked to be allowed by this gesture
-  /// recognizer.
-  ///
-  /// Subclasses of [GestureRecognizer] are supposed to override this method
-  /// instead of [addPointer] because [addPointer] will be called for each
-  /// pointer being added while [addAllowedPointer] is only called for pointers
-  /// that are allowed by this recognizer.
+  /// 注册一个新的指针，该手势识别器已对其进行检查。
   @protected
   void addAllowedPointer(PointerDownEvent event) { }
 
-  /// Handles a pointer being added that's not allowed by this recognizer.
-  ///
-  /// Subclasses can override this method and reject the gesture.
-  ///
-  /// See:
-  /// - [OneSequenceGestureRecognizer.handleNonAllowedPointer].
+  /// 处理此识别器不允许添加的指针。
   @protected
   void handleNonAllowedPointer(PointerDownEvent event) { }
 
-  /// Checks whether or not a pointer is allowed to be tracked by this recognizer.
+  /// 检查此识别器是否允许跟踪指针。
   @protected
   bool isPointerAllowed(PointerDownEvent event) {
-    // Currently, it only checks for device kind. But in the future we could check
-    // for other things e.g. mouse button.
     return _kindFilter == null || _kindFilter == event.kind;
   }
 
-  /// For a given pointer ID, returns the device kind associated with it.
-  ///
-  /// The pointer ID is expected to be a valid one i.e. an event was received
-  /// with that pointer ID.
+  /// 对于给定的指针ID，返回与其关联的设备类型。
   @protected
   PointerDeviceKind getKindForPointer(int pointer) {
-    assert(_pointerToKind.containsKey(pointer));
     return _pointerToKind[pointer]!;
   }
 
-  /// Releases any resources used by the object.
-  ///
-  /// This method is called by the owner of this gesture recognizer
-  /// when the object is no longer needed (e.g. when a gesture
-  /// recognizer is being unregistered from a [GestureDetector], the
-  /// GestureDetector widget calls this method).
+  /// 释放对象使用的所有资源。
   @mustCallSuper
   void dispose() { }
 
@@ -147,47 +92,13 @@ abstract class GestureRecognizer extends GestureArenaMember with DiagnosticableT
   /// recognizer looks for, like 'tap' or 'horizontal drag'.
   String get debugDescription;
 
-  /// Invoke a callback provided by the application, catching and logging any
-  /// exceptions.
-  ///
-  /// The `name` argument is ignored except when reporting exceptions.
-  ///
-  /// The `debugReport` argument is optional and is used when
-  /// [debugPrintRecognizerCallbacksTrace] is true. If specified, it must be a
-  /// callback that returns a string describing useful debugging information,
-  /// e.g. the arguments passed to the callback.
+  /// 调用应用程序提供的回调，捕获并记录所有异常。
   @protected
   T? invokeCallback<T>(String name, RecognizerCallback<T> callback, { String Function()? debugReport }) {
-    assert(callback != null);
     T? result;
     try {
-      assert(() {
-        if (debugPrintRecognizerCallbacksTrace) {
-          final String? report = debugReport != null ? debugReport() : null;
-          // The 19 in the line below is the width of the prefix used by
-          // _debugLogDiagnostic in arena.dart.
-          final String prefix = debugPrintGestureArenaDiagnostics ? ' ' * 19 + '❙ ' : '';
-          debugPrint('$prefix$this calling $name callback.${ report?.isNotEmpty == true ? " $report" : "" }');
-        }
-        return true;
-      }());
       result = callback();
     } catch (exception, stack) {
-      InformationCollector? collector;
-      assert(() {
-        collector = () sync* {
-          yield StringProperty('Handler', name);
-          yield DiagnosticsProperty<GestureRecognizer>('Recognizer', this, style: DiagnosticsTreeStyle.errorProperty);
-        };
-        return true;
-      }());
-      FlutterError.reportError(FlutterErrorDetails(
-        exception: exception,
-        stack: stack,
-        library: 'gesture',
-        context: ErrorDescription('while handling a gesture'),
-        informationCollector: collector
-      ));
     }
     return result;
   }
@@ -199,18 +110,9 @@ abstract class GestureRecognizer extends GestureArenaMember with DiagnosticableT
   }
 }
 
-/// Base class for gesture recognizers that can only recognize one
-/// gesture at a time. For example, a single [TapGestureRecognizer]
-/// can never recognize two taps happening simultaneously, even if
-/// multiple pointers are placed on the same widget.
-///
-/// This is in contrast to, for instance, [MultiTapGestureRecognizer],
-/// which manages each pointer independently and can consider multiple
-/// simultaneous touches to each result in a separate tap.
+/// 手势识别器的基类，一次只能识别一个手势。例如，即使将多个指针放在同一控件上，单个[TapGestureRecognizer]也永远无法识别同时发生的两次轻击。
 abstract class OneSequenceGestureRecognizer extends GestureRecognizer {
-  /// Initialize the object.
-  ///
-  /// {@macro flutter.gestures.GestureRecognizer.kind}
+  /// 初始化对象。
   OneSequenceGestureRecognizer({
     Object? debugOwner,
     PointerDeviceKind? kind,
@@ -234,10 +136,7 @@ abstract class OneSequenceGestureRecognizer extends GestureRecognizer {
   @override
   void rejectGesture(int pointer) { }
 
-  /// Called when the number of pointers this recognizer is tracking changes from one to zero.
-  ///
-  /// The given pointer ID is the ID of the last pointer this recognizer was
-  /// tracking.
+  /// 当此识别器正在跟踪的指针数从1变为零时调用。T
   @protected
   void didStopTrackingLastPointer(int pointer);
 
@@ -270,28 +169,14 @@ abstract class OneSequenceGestureRecognizer extends GestureRecognizer {
     for (final int pointer in _trackedPointers)
       GestureBinding.instance!.pointerRouter.removeRoute(pointer, handleEvent);
     _trackedPointers.clear();
-    assert(_entries.isEmpty);
     super.dispose();
   }
 
-  /// The team that this recognizer belongs to, if any.
-  ///
-  /// If [team] is null, this recognizer competes directly in the
-  /// [GestureArenaManager] to recognize a sequence of pointer events as a
-  /// gesture. If [team] is non-null, this recognizer competes in the arena in
-  /// a group with other recognizers on the same team.
-  ///
-  /// A recognizer can be assigned to a team only when it is not participating
-  /// in the arena. For example, a common time to assign a recognizer to a team
-  /// is shortly after creating the recognizer.
+  /// 该识别器所属的团队（如果有）。
   GestureArenaTeam? get team => _team;
   GestureArenaTeam? _team;
   /// The [team] can only be set once.
   set team(GestureArenaTeam? value) {
-    assert(value != null);
-    assert(_entries.isEmpty);
-    assert(_trackedPointers.isEmpty);
-    assert(_team == null);
     _team = value;
   }
 

@@ -27,10 +27,10 @@ enum GestureDisposition {
 /// member resolves the arena itself, that member still receives an
 /// [acceptGesture] callback.
 abstract class GestureArenaMember {
-  /// Called when this member wins the arena for the given pointer id.
+  /// 当此成员赢得给定指针ID的竞技场时调用。
   void acceptGesture(int pointer);
 
-  /// Called when this member loses the arena for the given pointer id.
+  /// 当此成员失去给定指针ID的竞技场时调用。
   void rejectGesture(int pointer);
 }
 
